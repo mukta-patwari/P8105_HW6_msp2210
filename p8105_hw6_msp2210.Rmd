@@ -52,6 +52,8 @@ homicide_data =
   )
 ```
 
+Odds ratios for Baltimore
+
 ```{r}
 baltimore_df =
   homicide_data %>% 
@@ -72,6 +74,52 @@ baltimore_fit %>%
     OR_conf_low = exp(conf.low), 
     OR_conf_high = exp(conf.high)) %>%
   filter(term == "victim_sexMale") %>%
-  select(term, OR, OR_conf_low, OR_conf_high, p.value) %>% 
+  select(term, OR, OR_conf_low, OR_conf_high) %>% 
   knitr::kable(digits = 3)
-``` 
+```
+
+Odds ratios for all cities
+
+```{r}
+cities_fit =
+  homicide_data %>%
+  group_by(city_state) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ glm(
+      solved ~ victim_age + victim_sex + victim_race,
+      data = .x,
+      family = binomial
+    )),
+    
+    tidy = map(fit, ~ 
+      broom::tidy(.x, conf.int = TRUE) %>%
+        mutate(
+          OR = exp(estimate),
+          OR_conf_low = exp(conf.low),
+          OR_conf_high = exp(conf.high)
+        ) %>%
+        filter(term == "victim_sexMale") %>%
+        select(term, OR, OR_conf_low, OR_conf_high)
+    )
+  ) %>%
+  unnest(tidy)
+```
+
+Plot
+
+```{r}
+cities_fit %>%
+  arrange(OR) %>%
+  mutate(city_state = factor(city_state, levels = city_state)) %>%
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = OR_conf_low, ymax = OR_conf_high), width = 0.2) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(
+    title = "Adjusted Odds Ratios for Solved Homicides",
+    x = "City",
+    y = "Adjusted Odds Ratio (Male vs Female)"
+  )
+```
+
