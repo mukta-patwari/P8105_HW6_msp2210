@@ -23,6 +23,8 @@ options(
 
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
+
+set.seed(1234)
 ```
 
 ## Problem 1
@@ -31,6 +33,7 @@ Loading the homicide data
 
 ```{r}
 library(readr)
+library(broom)
 
 homicide_data =
   read_csv("homicide-data.csv") %>% 
@@ -121,5 +124,85 @@ cities_fit %>%
     x = "City",
     y = "Adjusted Odds Ratio (Male vs Female)"
   )
+```
+
+## Problem 2
+
+```{r}
+library(p8105.datasets)
+data("weather_df")
+```
+
+**Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution for your estimates, and describe these in words.**
+
+```{r}
+library(modelr)
+library(patchwork)
+
+bootstrap_weather =
+  weather_df %>%
+  modelr::bootstrap(n = 5000) %>%
+  mutate(
+    model = map(strap, \(df) lm(tmax ~ tmin + prcp, data = df)),
+    r_squared = map_dbl(model, ~ glance(.x)$r.squared),
+    beta_ratio = map_dbl(model, ~ {
+      coefs = tidy(.x)
+      b1 = coefs$estimate[coefs$term == "tmin"]
+      b2 = coefs$estimate[coefs$term == "prcp"]
+      b1 / b2
+    })
+  )
+
+r_squared_plot =
+  bootstrap_weather %>%
+  ggplot(aes(x = r_squared)) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Bootstrap Distribution of R-squared", 
+    x = "R-squared", 
+    y = "Density")
+
+beta_ratio_plot =
+  bootstrap_weather %>% 
+  ggplot(aes(x = beta_ratio)) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Bootstrap Distribution of Beta 1 / Beta 2",
+    x = "Beta 1 / Beta 2",
+    y = "Density"
+  )
+
+r_squared_plot + beta_ratio_plot
+```
+
+This plot shows
+
+**Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval.**
+
+```{r}
+bootstrap_weather %>% 
+  summarise(
+    rsquared_lower = quantile(r_squared, 0.025),
+    rsquared_upper = quantile(r_squared, 0.975),
+    betaratio_lower = quantile(beta_ratio, 0.025),
+    betaratio_upper = quantile(beta_ratio, 0.975)
+  ) %>%
+  pivot_longer(
+    everything(),
+    names_to = c("Estimates", "CI"),
+    names_sep = "_"
+  ) %>%
+  pivot_wider(
+    names_from = CI,
+    values_from = value
+  ) %>%
+  knitr::kable(digits = 3)
+```
+
+## Problem 3
+
+```{r}
+birthweight_df =
+  read_csv("birthweight.csv")
 ```
 
